@@ -1,0 +1,15 @@
+===== Evaluation Metrics =====
+mAP : 0.0000
+NDS : 0.4425
+
+--- AP Per Class ---
+car                 : 0.0001
+truck               : 0.0000
+bus                 : 0.0000
+trailer             : 0.0000
+construction_vehicle: 0.0000
+pedestrian          : 0.0000
+motorcycle          : 0.0000
+bicycle             : 0.0000
+traffic_cone        : 0.0000
+barrier             : 0.0000

@@ -1,0 +1,643 @@
+# ============================================================================
+# Multi-Modal 3D Object Detection Configuration
+# Complete configuration for dataset, model, training, evaluation
+# ============================================================================
+
+# ============================================================================
+# DATASET CONFIGURATION
+# ============================================================================
+dataset:
+  # Dataset type
+  name: 'nuscenes'
+  version: 'v1.0-mini'  # 'v1.0-mini', 'v1.0-trainval', 'v1.0-test'
+  
+  # Data paths
+  data_root: 'data/nuscenes'
+  ann_file_train: 'data/nuscenes/nuscenes_infos_train.pkl'
+  ann_file_val: 'data/nuscenes/nuscenes_infos_val.pkl'
+  ann_file_test: 'data/nuscenes/nuscenes_infos_test.pkl'
+  
+  # Data splits
+  splits:
+    train: 'train'
+    val: 'val'
+    test: 'test'
+    
+  # Split ratios (if creating custom splits)
+  split_ratios:
+    train: 0.7
+    val: 0.2
+    test: 0.1
+  
+  # Classes (10 NuScenes classes)
+  classes:
+    - car
+    - truck
+    - trailer
+    - bus
+    - construction_vehicle
+    - bicycle
+    - motorcycle
+    - pedestrian
+    - traffic_cone
+    - barrier
+  
+  num_classes: 10
+  
+  # Point cloud range [x_min, y_min, z_min, x_max, y_max, z_max]
+  point_cloud_range: [-51.2, -51.2, -5.0, 51.2, 51.2, 3.0]
+  
+  # Voxel size for BEV grid (meters per pixel)
+  #voxel_size: [0.512, 0.512, 8.0]  # [x, y, z]  for 200x200  # (51.2 * 2) / 0.512 = 200
+  voxel_size: [2.048, 2.048, 8.0]                #for 50x50 
+  # BEV grid size
+  bev_h: 50 #200  #50 
+  bev_w: 50 #200  #50
+  
+  # Maximum points
+  max_points:
+    lidar: 35000
+    radar_per_sensor: 125 #125
+  
+  # Camera configuration
+  cameras:
+    names:
+      - CAM_FRONT
+      - CAM_FRONT_RIGHT
+      - CAM_FRONT_LEFT
+      - CAM_BACK
+      - CAM_BACK_LEFT
+      - CAM_BACK_RIGHT
+
+    num_cameras: 6 #3
+    image_size: [448, 800]  # [H, W]
+  
+  # Radar configuration
+  radars:
+    names:
+      - RADAR_FRONT
+      - RADAR_FRONT_LEFT
+      - RADAR_FRONT_RIGHT
+      - RADAR_BACK_LEFT
+      - RADAR_BACK_RIGHT
+    num_radars: 5
+  
+  # Data augmentation
+  augmentation:
+    # Camera augmentation
+    camera:
+      enable: true
+      #random_flip: true
+      #random_scale: [0.9, 1.1]
+      #random_rotation: [-10, 10]  # degrees
+      color_jitter:
+        brightness: 0.2
+        contrast: 0.2
+        saturation: 0.2
+        hue: 0.1
+      normalize:
+        mean: [0.485, 0.456, 0.406]
+        std: [0.229, 0.224, 0.225]
+    
+    # LiDAR augmentation
+    lidar:
+      enable: true
+      random_flip: true
+      random_scale: [0.95, 1.05]
+      #random_rotation: [-5, 5]     #[-45, 45]  # degrees
+      #random_translation: [0.5, 0.5, 0.2]  # [x, y, z] in meters
+    
+    # Radar augmentation
+    radar:
+      enable: true
+      random_flip: true
+      noise_std: 0.01
+
+# ============================================================================
+# MODEL CONFIGURATION
+# ============================================================================
+model:
+  # Model architecture
+  name: 'FlexibleMultiModal3DDetector'
+  
+  # Modality selection
+  # Options: 'camera_only', 'lidar_only', 'radar_only',
+  #          'camera+lidar', 'camera+radar', 'lidar+radar',
+  #          'camera+lidar+radar', 'all'
+  #modality_config: 'camera_only'
+  #modality_config: 'lidar_only'
+  
+  #modality_config: 'camera+lidar'
+  #modality_config: 'camera+radar'
+  modality_config: 'camera+lidar+radar'
+
+
+  # Modality flags (auto-set from modality_config, or manually configure)
+  use_camera: True #True #True
+  use_lidar: True
+  use_radar: True #true
+  
+  # Fusion configuration
+  # Options: 'bev', 'attention', 'late'
+  fusion_type: 'bev'
+  #fusion_type: 'attention'
+  #fusion_type: 'late'
+  
+  # Detection head
+  # Options: 'centernet' (for BEV), 'mlp' (for attention/late)
+  detection_head: 'centernet'
+  #detection_head: 'mlp'
+  
+  # ============================================================================
+  # ENCODER CONFIGURATIONS
+  # ============================================================================
+  
+  # Camera Encoder
+  camera_encoder:
+    type: 'ResNet'
+    backbone: 'resnet18'  # 'resnet34', 'resnet50', 'resnet101'
+    pretrained: true
+    freeze_bn: false
+    
+    # Input/Output dimensions
+    input_channels: 3
+    input_size: [448, 800]  # [H, W]
+    output_channels: 512
+    output_size: [28, 50] #[14, 25]  # [H', W']
+    
+    # Feature dimension
+    feature_dim: 512 #2048
+    
+    # Stride
+    total_stride: 16 #32
+  
+  # LiDAR Encoder
+  lidar_encoder:
+    type: 'PointNet'  # 'PointNet' or 'VoxelNet'
+                      #VoxelNet + SparseConv BEV encoder
+    # Input/Output dimensions
+    input_channels: 4 #5  # [x, y, z, intensity, ring]
+    max_points: 35000
+    feature_dim: 1024
+    
+    # PointNet architecture
+    mlp_layers: [64, 128, 256, 512, 1024]
+    use_batch_norm: true
+    dropout: 0.1
+
+    #type: VoxelNet
+    #voxel_size: [0.1, 0.1, 0.2]
+    #point_cloud_range: [-51.2, 51.2, -5, 3]
+    #sparse_conv_channels: [16, 32, 64, 128]
+    #bev_channels: 256
+  
+  # Radar Encoder
+  radar_encoder:
+    type: 'MultiRadar'
+    
+    # Input/Output dimensions
+    input_channels: 7  # [x, y, z, vx, vy, rcs, timestamp]
+    max_points_per_sensor: 125
+    num_radars: 5 #3
+    feature_dim: 256
+    
+    # Architecture
+    mlp_layers: [32, 64, 128, 256]
+    fusion_method: 'concat'  # 'concat', 'max', 'mean'
+    use_batch_norm: true
+    dropout: 0.1
+  
+  # ============================================================================
+  # FUSION CONFIGURATIONS
+  # ============================================================================
+  
+  # BEV Fusion
+  bev_fusion:
+    bev_channels: 256
+    bev_h: 50 
+    bev_w: 50 
+    
+    # Projection layers
+    camera_proj_channels: [512, 256]
+    lidar_proj_hidden: 512
+    radar_proj_hidden: 256
+    
+    # Fusion network
+    fusion_channels: [512, 256]
+  
+  # Attention Fusion
+  attention_fusion:
+    hidden_dim: 512
+    num_heads: 8
+    num_layers: 2
+    dropout: 0.1
+    
+    # FFN expansion
+    ffn_expansion: 4
+  
+  # Late Fusion
+  late_fusion:
+    output_dim: 512
+    hidden_dims: [1024]
+    dropout: 0.3
+  
+  # ============================================================================
+  # DETECTION HEAD CONFIGURATIONS
+  # ============================================================================
+  
+  # CenterNet Head
+  centernet_head:
+    in_channels: 256
+    head_conv: 64
+    num_classes: 10
+    
+    # Output predictions
+    predict_heatmap: true
+    predict_offset: true
+    predict_size: true
+    predict_rotation: true
+    predict_velocity: true
+    
+    # Heatmap settings
+    heatmap_threshold: 0.1 #0.3
+    max_detections: 100
+  
+  # MLP Head
+  mlp_head:
+    in_channels: 512
+    hidden_dims: [256]
+    num_classes: 10
+    dropout: 0.1
+
+# ============================================================================
+# TRAINING CONFIGURATION
+# ============================================================================
+train:
+  # Training settings
+  num_epochs: 10 #20
+  batch_size: 4
+  num_workers: 4
+  pin_memory: true
+
+  learning_rate: .0001
+  weight_decay: 0.01
+  # Optimizer
+  optimizer:
+    type: 'AdamW'
+    lr: 0.0001
+    weight_decay: 0.01
+    betas: [0.9, 0.999]
+    eps: 1.0e-08
+  
+  # Learning rate scheduler
+  lr_scheduler:
+    type: 'CosineAnnealingLR'
+    T_max: 50
+    eta_min: 1.0e-06
+    
+    # Alternative: StepLR
+    # type: 'StepLR'
+    # step_size: 20
+    # gamma: 0.1
+    
+    # Alternative: MultiStepLR
+    # type: 'MultiStepLR'
+    # milestones: [30, 40]
+    # gamma: 0.1
+  
+  # Warmup
+  warmup:
+    enable: true
+    epochs: 5
+    initial_lr: 1.0e-05
+  
+  # Gradient clipping
+  grad_clip:
+    enable: true
+    max_norm: 10.0
+  
+  # Mixed precision training
+  mixed_precision:
+    enable: true
+    
+  # Gradient accumulation
+  gradient_accumulation:
+    enable: false
+    steps: 2
+  
+  # Loss weights
+  loss_weights:
+    heatmap: 1.0
+    offset: 1.0
+    size: 0.1
+    rotation: 0.1
+    velocity: 0.1
+    cls: 1.0
+    reg: 1.0
+  
+  # Loss configuration
+  loss:
+    # Heatmap loss (focal loss)
+    heatmap:
+      type: 'FocalLoss'
+      alpha: 2.0
+      beta: 4.0
+    
+    # Regression losses
+    offset:
+      type: 'L1Loss'
+    
+    size:
+      type: 'L1Loss'
+    
+    rotation:
+      type: 'L1Loss'
+    
+    velocity:
+      type: 'L1Loss'
+  
+  # Checkpoint settings
+  checkpoint:
+    save_dir: './checkpoints'
+    save_interval: 5  # epochs
+    save_best: true
+    keep_last: 1
+  
+  # Logging
+  logging:
+    log_dir: './logs'
+    log_interval: 10  # iterations
+    tensorboard: false #true
+    wandb:
+      enable: false
+      project: 'multimodal-3d-detection'
+      entity: null
+  
+  # Resume training
+  resume:
+    enable: false
+    checkpoint_path: null
+    resume_optimizer: true
+    resume_scheduler: true
+
+# ============================================================================
+# VALIDATION CONFIGURATION
+# ============================================================================
+val:
+  # Validation settings
+  batch_size: 4
+  num_workers: 4
+  interval: 1  # Validate every N epochs
+  
+  # Post-processing
+  post_processing:
+    score_threshold: 0.3
+    nms_threshold: 0.5
+    max_detections: 100
+  
+  # Visualization during validation
+  visualization:
+    enable: true
+    num_samples: 5
+    save_dir: './visualizations'
+
+# ============================================================================
+# TEST CONFIGURATION
+# ============================================================================
+test:
+  # Test settings
+  batch_size: 1
+  num_workers: 4
+  
+  # Model checkpoint
+  checkpoint_path: './checkpoints/best_model.pth'
+  
+  # Post-processing
+  post_processing:
+    score_threshold: 0.3
+    nms_threshold: 0.5
+    max_detections: 100
+  
+  # Output
+  output_dir: './test_results'
+  save_predictions: true
+  save_visualizations: true
+
+# ============================================================================
+# EVALUATION METRICS
+# ============================================================================
+metrics:
+  # Primary metrics
+  primary: 'mAP'  # 'mAP' or 'NDS'
+  
+  # NuScenes metrics
+  nuscenes:
+    # Detection metrics
+    mAP: true  # mean Average Precision
+    NDS: true  # NuScenes Detection Score
+    
+    # Error metrics
+    mATE: true  # mean Average Translation Error (meters)
+    mASE: true  # mean Average Scale Error (1 - IoU)
+    mAOE: true  # mean Average Orientation Error (radians)
+    mAVE: true  # mean Average Velocity Error (m/s)
+    mAAE: true  # mean Average Attribute Error
+    
+    # IoU thresholds for mAP
+    iou_thresholds: [0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95]
+    
+    # Distance thresholds (meters)
+    dist_ths: [0.5, 1.0, 2.0, 4.0]
+    
+    # Min recall for mAP
+    min_recall: 0.1
+    min_precision: 0.1
+  
+  # Per-class metrics
+  per_class: true
+  
+  # Confusion matrix
+  confusion_matrix:
+    enable: true
+    normalize: true
+  
+  # Additional metrics
+  speed:
+    fps: true
+    latency: true
+  
+  memory:
+    peak_memory: true
+    average_memory: true
+
+# ============================================================================
+# VISUALIZATION CONFIGURATION
+# ============================================================================
+visualization:
+  # Visualization settings
+  enable: true
+  output_dir: './visualizations'
+  
+  # What to visualize
+  visualize:
+    # BEV visualization
+    bev:
+      enable: true
+      plot_gt: true
+      plot_pred: true
+      plot_heatmap: true
+      grid_size: [50, 50] #[200, 200]
+      pc_range: [-51.2, -51.2, -5.0, 51.2, 51.2, 3.0]
+    
+    # 3D visualization
+    point_cloud:
+      enable: true
+      plot_gt_boxes: true
+      plot_pred_boxes: true
+      color_by_class: true
+      max_points: 10000
+    
+    # Camera visualization
+    camera:
+      enable: true
+      project_boxes: true
+      show_all_cameras: false
+      main_camera: 'CAM_FRONT'
+    
+    # Feature visualization
+    features:
+      enable: false
+      visualize_attention: false
+      visualize_bev_features: true
+  
+  # Visualization style
+  style:
+    # Box colors per class
+    box_colors:
+      car: [0, 255, 0]  # Green
+      truck: [255, 128, 0]  # Orange
+      trailer: [255, 255, 0]  # Yellow
+      bus: [255, 0, 255]  # Magenta
+      construction_vehicle: [128, 128, 0]  # Olive
+      bicycle: [0, 255, 255]  # Cyan
+      motorcycle: [128, 0, 255]  # Purple
+      pedestrian: [255, 0, 0]  # Red
+      traffic_cone: [255, 192, 203]  # Pink
+      barrier: [128, 128, 128]  # Gray
+    
+    # Line thickness
+    box_line_width: 2
+    
+    # Confidence threshold for display
+    score_threshold: 0.3
+    
+    # Font settings
+    font_size: 12
+    font_color: [255, 255, 255]
+  
+  # Export settings
+  export:
+    format: 'png'  # 'png', 'jpg', 'pdf'
+    dpi: 150
+    save_video: false
+    video_fps: 10
+
+# ============================================================================
+# INFERENCE CONFIGURATION
+# ============================================================================
+inference:
+  # Device
+  device: 'cpu' #'cuda'  # 'cuda', 'cpu'
+  
+  # Batch processing
+  batch_size: 1
+  
+  # Model checkpoint
+  checkpoint_path: './checkpoints/best_model.pth'
+  
+  # Input data
+  input_data:
+    camera_dir: null
+    lidar_dir: null
+    radar_dir: null
+  
+  # Output
+  output_dir: './inference_results'
+  save_predictions: true
+  save_visualizations: true
+  
+  # Post-processing
+  post_processing:
+    score_threshold: 0.3
+    nms_threshold: 0.5
+    max_detections: 100
+
+# ============================================================================
+# ABLATION STUDY CONFIGURATION
+# ============================================================================
+ablation:
+  enable: false
+  
+  # Modality ablation
+  modality_ablation:
+    enable: true
+    configs:
+      - camera_only
+      - lidar_only
+      - radar_only
+      - camera+lidar
+      - camera+radar
+      - lidar+radar
+      - camera+lidar+radar
+  
+  # Fusion ablation
+  fusion_ablation:
+    enable: true
+    modality: 'camera+lidar'
+    fusion_types:
+      - bev
+      - attention
+      - late
+  
+  # Encoder ablation
+  encoder_ablation:
+    enable: false
+    camera_backbones:
+      - resnet34
+      - resnet50
+      - resnet101
+
+# ============================================================================
+# HARDWARE CONFIGURATION
+# ============================================================================
+hardware:
+  # GPU settings
+  gpu:
+    visible_devices: '0'  # '0', '0,1', '0,1,2,3'
+    multi_gpu: false
+    
+    # Distributed training
+    distributed:
+      enable: false
+      backend: 'nccl'
+      world_size: 1
+      rank: 0
+  
+  # CPU settings
+  cpu:
+    num_threads: 8
+
+# ============================================================================
+# RANDOM SEED
+# ============================================================================
+seed: 42
+deterministic: true
+
+# ============================================================================
+# DEBUG MODE
+# ============================================================================
+debug:
+  enable: false
+  overfit_batch: false
+  profile: false
+  check_gradients: false
