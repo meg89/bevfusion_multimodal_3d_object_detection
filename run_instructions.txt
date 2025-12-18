@@ -1,0 +1,60 @@
+Run instruction guide:
+
+1) Install the required library:
+    python >=3.8
+    pip install -r requirements.txt
+
+2) Prepare the dataset: 
+    Go to the site https://www.nuscenes.org/nuscenes#download. Register your account. 
+    Download the nuscenes mini-v1.0 dataset from the link.
+    Once the tar file is downloaded. Extract the datset into a data folder
+    Set the dataset folder path in configs/base.yaml file. 
+    Run the following commands to convert dataset info:
+        python data_converter.py --config configs/base.yaml --split train
+        python data_converter.py --config configs/base.yaml --split val
+        python data_converter.py --config configs/base.yaml --split test
+    
+    Run he following command to validate if dataset converted:
+        python data_converter.py --config configs/base.yaml --show-config
+        python data_converter.py --config configs/base.yaml --show-config
+
+    Run below commands to Diagnosis the dataset with samples prints:
+    # Basic usage (5 samples)
+        python validate_data_with_samples.py --config configs/base.yaml
+
+    # More samples (10)
+        python validate_data_with_samples.py --samples 10
+
+    # Specific split
+        python validate_data_with_samples.py --split train --samples 5
+
+3) Training pipeline:
+    Run the below commands to check the encoder: 
+        python encoders.py
+        python fusion.py
+
+    Run the command to train the model:
+        python train_detect.py train configs/base.yaml 
+        python train_detect.py infer [path]     # Not tested
+
+4) Run the evaluation:
+    Run below command to evaluate the pretrained model over valid daaset, if needed.
+    It save the output metric file into a txt file
+        python eval.py configs/base.yaml
+
+5) Run the inference:
+    python inference.py --model checkpoints/best_model.pth
+
+6) Experiments:
+
+    The code is designed in such a way that user can change the modality_cfg into configs/base.yaml 
+    to experiment with different modality configs. 
+
+    ------------------|------------|-----------------
+    modality            fusion          detection head
+    ------------------|------------|-----------------
+    camera_only         bevfusion       Centerhead
+    lidar_only          bevfusion       Centerhead
+    camera+Lidar        bevfusion       Centerhead   
+    camera+lidar+radar  bevfusion       Centerhead
+
